@@ -26,7 +26,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/gosnmp/gosnmp"
+	"github.com/Felamande/gosnmp"
 )
 
 func isPlayback() bool {
