@@ -1115,8 +1115,8 @@ func (x *GoSNMP) unmarshalResponse(packet []byte, response *SnmpPacket) error {
 		}
 
 		if errorStatus, ok := rawError.(int); ok {
-			response.Error = SNMPError(errorStatus)                //nolint:gosec
-			x.Logger.Printf("errorStatus: %d", uint8(errorStatus)) //nolint:gosec
+			response.Error = SNMPError(errorStatus)               //nolint:gosec
+			x.Logger.Printf("errorStatus: %d", uint(errorStatus)) //nolint:gosec
 		}
 
 		// Parse Error-Index

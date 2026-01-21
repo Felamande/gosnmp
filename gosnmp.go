@@ -238,7 +238,7 @@ const (
 //go:generate stringer -type SNMPError
 
 // SNMPError is the type for standard SNMP errors.
-type SNMPError uint8
+type SNMPError uint
 
 // SNMP Errors
 const (
