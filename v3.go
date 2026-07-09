@@ -353,7 +353,7 @@ func (packet *SnmpPacket) prepareV3ScopedPDU() ([]byte, error) {
 	buf.Write(append([]byte{byte(OctetString)}, namelen...))
 	buf.WriteString(packet.ContextName)
 
-	data, err := packet.marshalPDU()
+	data, err := packet.marshalPDU(false)
 	if err != nil {
 		return nil, err
 	}

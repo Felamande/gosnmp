@@ -274,7 +274,7 @@ func TestEnmarshalVarbind(t *testing.T) {
 	for _, test := range testsEnmarshal {
 		for j, test2 := range test.vbPositions {
 			snmppdu := &SnmpPDU{Name: test2.oid, Type: test2.pduType, Value: test2.pduValue}
-			testBytes, err := marshalVarbind(snmppdu)
+			testBytes, err := marshalVarbind(snmppdu, false)
 			if err != nil {
 				t.Errorf("#%s:%d:%s err returned: %v",
 					test.funcName, j, test2.oid, err)
@@ -296,7 +296,7 @@ func TestEnmarshalVBL(t *testing.T) {
 			Variables: vbPosPdus(test),
 		}
 
-		testBytes, err := x.marshalVBL()
+		testBytes, err := x.marshalVBL(false)
 		if err != nil {
 			t.Errorf("#%s: marshalVBL() err returned: %v", test.funcName, err)
 		}
@@ -339,7 +339,7 @@ func TestEnmarshalMsg(t *testing.T) {
 			Variables: vbPosPdus(test),
 		}
 
-		testBytes, err := x.marshalMsg()
+		testBytes, err := x.marshalMsg(false)
 		if err != nil {
 			t.Errorf("#%s: marshal() err returned: %v", test.funcName, err)
 		}
@@ -351,7 +351,7 @@ func TestEnmarshalMsg(t *testing.T) {
 			if err != nil {
 				t.Errorf("#%s: SnmpDecodePacket() err returned: %v", test.funcName, err)
 			}
-			newResultTestBytes, err := result.marshalMsg()
+			newResultTestBytes, err := result.marshalMsg(false)
 			if err != nil {
 				t.Errorf("#%s: marshal() err returned: %v", test.funcName, err)
 			}
@@ -890,7 +890,7 @@ func TestUnmarshal(t *testing.T) {
 				}
 			})
 			t.Run("remarshal", func(t *testing.T) {
-				result, err := res.marshalMsg()
+				result, err := res.marshalMsg(false)
 				if err != nil {
 					t.Fatalf("#%s: marshalMsg() err returned: %v", funcName, err)
 				}
@@ -1638,7 +1638,7 @@ func TestV3USMInitialPacket(t *testing.T) {
 		Logger:             logger,
 		Variables:          emptyPdus,
 	}
-	iBytes, err := blankPacket.marshalMsg()
+	iBytes, err := blankPacket.marshalMsg(false)
 	if err != nil {
 		t.Errorf("#TestV3USMInitialPacket: marshalMsg() err returned: %v", err)
 	}
@@ -1705,7 +1705,7 @@ func TestSendOneRequest_dups(t *testing.T) {
 				},
 			}, 0, 0)
 			rspPkt.RequestID = reqPkt.RequestID
-			outBuf, err := rspPkt.marshalMsg()
+			outBuf, err := rspPkt.marshalMsg(false)
 			if err != nil {
 				t.Errorf("ERR: %s", err)
 			}
@@ -1893,7 +1893,7 @@ func withUnconnectedSocket(t *testing.T, enable bool) {
 				},
 			}, 0, 0)
 			rspPkt.RequestID = reqPkt.RequestID
-			outBuf, err := rspPkt.marshalMsg()
+			outBuf, err := rspPkt.marshalMsg(false)
 			if err != nil {
 				t.Errorf("ERR: %s", err)
 			}
@@ -2174,7 +2174,7 @@ func TestMarshalVarbindRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := marshalVarbind(&tt.pdu)
+			result, err := marshalVarbind(&tt.pdu, false)
 			if err != nil {
 				t.Fatalf("marshalVarbind() error = %v", err)
 			}

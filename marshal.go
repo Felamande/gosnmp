@@ -259,7 +259,7 @@ sendRetry:
 		}
 
 		var outBuf []byte
-		outBuf, err = packetOut.marshalMsg()
+		outBuf, err = packetOut.marshalMsg(x.RawMode)
 		if err != nil {
 			// Don't retry - not going to get any better!
 			err = fmt.Errorf("marshal: %w", err)
@@ -505,11 +505,11 @@ func (x *GoSNMP) send(packetOut *SnmpPacket, wait bool) (result *SnmpPacket, err
 
 // MarshalMsg marshalls a snmp packet, ready for sending across the wire
 func (packet *SnmpPacket) MarshalMsg() ([]byte, error) {
-	return packet.marshalMsg()
+	return packet.marshalMsg(false)
 }
 
 // marshal an SNMP message
-func (packet *SnmpPacket) marshalMsg() ([]byte, error) {
+func (packet *SnmpPacket) marshalMsg(rawMode bool) ([]byte, error) {
 	var err error
 	buf := new(bytes.Buffer)
 
@@ -526,7 +526,7 @@ func (packet *SnmpPacket) marshalMsg() ([]byte, error) {
 		buf.Write([]byte{4, uint8(len(packet.Community))}) //nolint:gosec
 		buf.WriteString(packet.Community)
 		// pdu
-		pdu, err2 := packet.marshalPDU()
+		pdu, err2 := packet.marshalPDU(rawMode)
 		if err2 != nil {
 			return nil, err2
 		}
@@ -604,7 +604,7 @@ func (packet *SnmpPacket) marshalSNMPV1TrapHeader() ([]byte, error) {
 }
 
 // marshal a PDU
-func (packet *SnmpPacket) marshalPDU() ([]byte, error) {
+func (packet *SnmpPacket) marshalPDU(rawMode bool) ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	switch packet.PDUType {
@@ -677,7 +677,7 @@ func (packet *SnmpPacket) marshalPDU() ([]byte, error) {
 	}
 
 	// build varbind list
-	vbl, err := packet.marshalVBL()
+	vbl, err := packet.marshalVBL(rawMode)
 	if err != nil {
 		return nil, fmt.Errorf("marshalPDU: unable to marshal varbind list: %w", err)
 	}
@@ -703,11 +703,11 @@ func (packet *SnmpPacket) marshalPDU() ([]byte, error) {
 }
 
 // marshal a varbind list
-func (packet *SnmpPacket) marshalVBL() ([]byte, error) {
+func (packet *SnmpPacket) marshalVBL(rawMode bool) ([]byte, error) {
 	vblBuf := new(bytes.Buffer)
 	for _, pdu := range packet.Variables {
 		// The copy of the 'for' variable "pdu" can be deleted (Go 1.22+)
-		vb, err := marshalVarbind(&pdu)
+		vb, err := marshalVarbind(&pdu, rawMode)
 		if err != nil {
 			return nil, err
 		}
@@ -734,7 +734,7 @@ func (packet *SnmpPacket) marshalVBL() ([]byte, error) {
 //	  ObjectIdentifier (pdu.Name)
 //	  <Value TLV>      (pdu.Type + pdu.Value)
 //	}
-func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
+func marshalVarbind(pdu *SnmpPDU, rawMode bool) ([]byte, error) {
 	oid, err := marshalObjectIdentifier(pdu.Name)
 	if err != nil {
 		return nil, err
@@ -762,15 +762,23 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
 
 		// Number
 		var intBytes []byte
-		switch value := pdu.Value.(type) {
-		case byte:
-			intBytes = []byte{byte(pdu.Value.(int))} //nolint:gosec
-		case int:
-			if intBytes, err = marshalInt32(value); err != nil {
-				return nil, fmt.Errorf("error mashalling PDU Integer: %w", err)
+		if rawMode {
+			rawBytes, ok := pdu.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("raw mode: expected []byte for Integer, got %T", pdu.Value)
 			}
-		default:
-			return nil, fmt.Errorf("unable to marshal PDU Integer; not byte or int")
+			intBytes = rawBytes
+		} else {
+			switch value := pdu.Value.(type) {
+			case byte:
+				intBytes = []byte{byte(pdu.Value.(int))} //nolint:gosec
+			case int:
+				if intBytes, err = marshalInt32(value); err != nil {
+					return nil, fmt.Errorf("error mashalling PDU Integer: %w", err)
+				}
+			default:
+				return nil, fmt.Errorf("unable to marshal PDU Integer; not byte or int")
+			}
 		}
 		if err = marshalTLV(tmpBuf, byte(pdu.Type), intBytes); err != nil {
 			return nil, err
@@ -786,17 +794,25 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
 
 		// Number
 		var intBytes []byte
-		switch value := pdu.Value.(type) {
-		case uint32:
-			if intBytes, err = marshalUint32(value); err != nil {
-				return nil, fmt.Errorf("error marshalling PDU Uinteger32 type from uint32: %w", err)
+		if rawMode {
+			rawBytes, ok := pdu.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("raw mode: expected []byte for %s, got %T", pdu.Type, pdu.Value)
 			}
-		case uint:
-			if intBytes, err = marshalUint32(value); err != nil {
-				return nil, fmt.Errorf("error marshalling PDU Uinteger32 type from uint: %w", err)
+			intBytes = rawBytes
+		} else {
+			switch value := pdu.Value.(type) {
+			case uint32:
+				if intBytes, err = marshalUint32(value); err != nil {
+					return nil, fmt.Errorf("error marshalling PDU Uinteger32 type from uint32: %w", err)
+				}
+			case uint:
+				if intBytes, err = marshalUint32(value); err != nil {
+					return nil, fmt.Errorf("error marshalling PDU Uinteger32 type from uint: %w", err)
+				}
+			default:
+				return nil, fmt.Errorf("unable to marshal pdu.Type %v; unknown pdu.Value %v[type=%T]", pdu.Type, pdu.Value, pdu.Value)
 			}
-		default:
-			return nil, fmt.Errorf("unable to marshal pdu.Type %v; unknown pdu.Value %v[type=%T]", pdu.Type, pdu.Value, pdu.Value)
 		}
 		if err = marshalTLV(tmpBuf, byte(pdu.Type), intBytes); err != nil {
 			return nil, err
@@ -812,13 +828,21 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
 
 		// OctetString
 		var octetStringBytes []byte
-		switch value := pdu.Value.(type) {
-		case []byte:
-			octetStringBytes = value
-		case string:
-			octetStringBytes = []byte(value)
-		default:
-			return nil, fmt.Errorf("unable to marshal PDU OctetString; not []byte or string")
+		if rawMode {
+			rawBytes, ok := pdu.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("raw mode: expected []byte for %s, got %T", pdu.Type, pdu.Value)
+			}
+			octetStringBytes = rawBytes
+		} else {
+			switch value := pdu.Value.(type) {
+			case []byte:
+				octetStringBytes = value
+			case string:
+				octetStringBytes = []byte(value)
+			default:
+				return nil, fmt.Errorf("unable to marshal PDU OctetString; not []byte or string")
+			}
 		}
 		if err = marshalTLV(tmpBuf, byte(pdu.Type), octetStringBytes); err != nil {
 			return nil, err
@@ -831,10 +855,20 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
 		if err = marshalTLV(tmpBuf, byte(ObjectIdentifier), oid); err != nil {
 			return nil, err
 		}
-		value := pdu.Value.(string)
-		oidBytes, encErr := marshalObjectIdentifier(value)
-		if encErr != nil {
-			return nil, fmt.Errorf("error marshalling ObjectIdentifier: %w", encErr)
+		var oidBytes []byte
+		if rawMode {
+			rawBytes, ok := pdu.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("raw mode: expected []byte for ObjectIdentifier, got %T", pdu.Value)
+			}
+			oidBytes = rawBytes
+		} else {
+			value := pdu.Value.(string)
+			var encErr error
+			oidBytes, encErr = marshalObjectIdentifier(value)
+			if encErr != nil {
+				return nil, fmt.Errorf("error marshalling ObjectIdentifier: %w", encErr)
+			}
 		}
 		if err = marshalTLV(tmpBuf, byte(pdu.Type), oidBytes); err != nil {
 			return nil, err
@@ -847,16 +881,23 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
 		if err = marshalTLV(tmpBuf, byte(ObjectIdentifier), oid); err != nil {
 			return nil, err
 		}
-		// OctetString
 		var ipAddressBytes []byte
-		switch value := pdu.Value.(type) {
-		case []byte:
-			ipAddressBytes = value
-		case string:
-			ip := net.ParseIP(value)
-			ipAddressBytes = ipv4toBytes(ip)
-		default:
-			return nil, fmt.Errorf("unable to marshal PDU IPAddress; not []byte or string")
+		if rawMode {
+			rawBytes, ok := pdu.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("raw mode: expected []byte for IPAddress, got %T", pdu.Value)
+			}
+			ipAddressBytes = rawBytes
+		} else {
+			switch value := pdu.Value.(type) {
+			case []byte:
+				ipAddressBytes = value
+			case string:
+				ip := net.ParseIP(value)
+				ipAddressBytes = ipv4toBytes(ip)
+			default:
+				return nil, fmt.Errorf("unable to marshal PDU IPAddress; not []byte or string")
+			}
 		}
 		if err = marshalTLV(tmpBuf, byte(pdu.Type), ipAddressBytes); err != nil {
 			return nil, err
@@ -866,17 +907,26 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
 		}
 
 	case OpaqueFloat, OpaqueDouble:
-		converters := map[Asn1BER]func(any) ([]byte, error){
-			OpaqueFloat:  marshalFloat32,
-			OpaqueDouble: marshalFloat64,
-		}
-
 		intBuf := new(bytes.Buffer)
 		intBuf.WriteByte(byte(AsnExtensionTag))
 		intBuf.WriteByte(byte(pdu.Type))
-		intBytes, encErr := converters[pdu.Type](pdu.Value)
-		if encErr != nil {
-			return nil, fmt.Errorf("error converting PDU value type %v to %v: %w", pdu.Value, pdu.Type, encErr)
+		var intBytes []byte
+		if rawMode {
+			rawBytes, ok := pdu.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("raw mode: expected []byte for %s, got %T", pdu.Type, pdu.Value)
+			}
+			intBytes = rawBytes
+		} else {
+			converters := map[Asn1BER]func(any) ([]byte, error){
+				OpaqueFloat:  marshalFloat32,
+				OpaqueDouble: marshalFloat64,
+			}
+			var encErr error
+			intBytes, encErr = converters[pdu.Type](pdu.Value)
+			if encErr != nil {
+				return nil, fmt.Errorf("error converting PDU value type %v to %v: %w", pdu.Value, pdu.Type, encErr)
+			}
 		}
 		intLength, encErr := marshalLength(len(intBytes))
 		if encErr != nil {
@@ -904,9 +954,19 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
 		if err = marshalTLV(tmpBuf, byte(ObjectIdentifier), oid); err != nil {
 			return nil, err
 		}
-		intBytes, encErr := marshalUint64(pdu.Value)
-		if encErr != nil {
-			return nil, fmt.Errorf("error marshalling Counter64: %w", encErr)
+		var intBytes []byte
+		if rawMode {
+			rawBytes, ok := pdu.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("raw mode: expected []byte for Counter64, got %T", pdu.Value)
+			}
+			intBytes = rawBytes
+		} else {
+			var encErr error
+			intBytes, encErr = marshalUint64(pdu.Value)
+			if encErr != nil {
+				return nil, fmt.Errorf("error marshalling Counter64: %w", encErr)
+			}
 		}
 		if err = marshalTLV(tmpBuf, byte(pdu.Type), intBytes); err != nil {
 			return nil, err

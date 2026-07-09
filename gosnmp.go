@@ -543,7 +543,7 @@ func (x *GoSNMP) SnmpEncodePacket(pdutype PDUType, pdus []SnmpPDU, nonRepeaters 
 	}
 
 	var out []byte
-	out, err = pkt.marshalMsg()
+	out, err = pkt.marshalMsg(false)
 	if err != nil {
 		return []byte{}, err
 	}

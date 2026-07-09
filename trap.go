@@ -220,7 +220,7 @@ func (t *TrapListener) Close() {
 
 // SendUDP sends a given SnmpPacket to the provided address using the currently opened connection.
 func (t *TrapListener) SendUDP(packet *SnmpPacket, addr *net.UDPAddr) error {
-	ob, err := packet.marshalMsg()
+	ob, err := packet.marshalMsg(false)
 	if err != nil {
 		return fmt.Errorf("error marshaling SnmpPacket: %w", err)
 	}
