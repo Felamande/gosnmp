@@ -138,6 +138,13 @@ type GoSNMP struct {
 	// - 'p,i,I,t,E' -> pull requests welcome
 	AppOpts map[string]any
 
+	// RawMode, when true, returns raw value bytes ([]byte) in SnmpPDU.Value
+	// instead of converting to Go types (int, string, uint64, etc.).
+	// The PDU Type is still identified and stored in SnmpPDU.Type.
+	// Null, NoSuchObject, NoSuchInstance, and EndOfMibView still return nil.
+	// The returned slice aliases the receive buffer; copy it if persistence is needed.
+	RawMode bool
+
 	// Internal - used to sync requests to responses.
 	requestID uint32
 	random    uint32
